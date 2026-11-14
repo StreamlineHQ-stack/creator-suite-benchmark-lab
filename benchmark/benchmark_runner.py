@@ -1,0 +1,47 @@
+"""Run the unmodified local extraction_engine.py against the 150-slide benchmark.
+Usage: python -m benchmark.benchmark_runner --dataset /path/to/creator_suite_150_benchmark --output ./benchmark_results
+"""
+import argparse, csv, json, sys, time, traceback
+from pathlib import Path
+from PIL import Image
+from extraction_strategy_router import extract, STRATEGIES
+from benchmark.quality_metrics import measure
+
+def run(dataset, output, limit=None, save_previews=False, strategy="baseline_v6"):
+    if strategy not in STRATEGIES: raise ValueError(f"Unknown strategy: {strategy}")
+    dataset=Path(dataset); output=Path(output); output.mkdir(parents=True,exist_ok=True)
+    with (dataset/'manifest.csv').open(newline='',encoding='utf-8-sig') as f: entries=list(csv.DictReader(f))
+    if limit: entries=entries[:limit]
+    rows=[]
+    for index, item in enumerate(entries,1):
+        start=time.monotonic(); row={k:item[k] for k in ('id','difficulty','category','original')}; row['strategy']=strategy
+        try:
+            with Image.open(dataset/item['original']) as x: original=x.convert('RGB')
+            with Image.open(dataset/item['clean_ground_truth']) as x: clean=x.convert('RGB')
+            with Image.open(dataset/item['text_mask']) as x: truth=x.convert('L')
+            extracted,mask,boxes,coverage=extract(original,strategy=strategy)
+            row.update(measure(mask,truth,extracted,clean,original))
+            row.update(status='ok',ocr_box_count=len(boxes),error='')
+            if save_previews:
+                preview=output/'previews';preview.mkdir(exist_ok=True)
+                extracted.save(preview/f"{item['id']}_extracted.png")
+                mask.save(preview/f"{item['id']}_detected_mask.png")
+        except Exception as e:
+            row.update(status='error',error=f'{type(e).__name__}: {e}')
+        row['seconds']=round(time.monotonic()-start,2)
+        rows.append(row)
+        print(f"{index}/{len(entries)} {item['id']} {row['status']} {row['seconds']}s",flush=True)
+    with (output/'results.csv').open('w',newline='',encoding='utf-8') as f:
+        columns=list(dict.fromkeys(k for r in rows for k in r))
+        writer=csv.DictWriter(f,fieldnames=columns);writer.writeheader();writer.writerows(rows)
+    with (output/'results.json').open('w',encoding='utf-8') as f: json.dump(rows,f,indent=2)
+    from benchmark.benchmark_report import write_report
+    write_report(rows,output/'REPORT.md')
+    return rows
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--dataset',required=True);parser.add_argument('--output',default='benchmark_results')
+    parser.add_argument('--limit',type=int,default=None);parser.add_argument('--save-previews',action='store_true')
+    parser.add_argument('--strategy',choices=list(STRATEGIES),default='baseline_v6')
+    a=parser.parse_args();run(a.dataset,a.output,a.limit,a.save_previews,a.strategy)
