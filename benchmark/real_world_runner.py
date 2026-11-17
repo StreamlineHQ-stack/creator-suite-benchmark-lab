@@ -28,6 +28,9 @@ def run_real(dataset,output,limit=None,save_previews=True,strategy='baseline_v6'
             if result.size!=original.size or mask.size!=original.size: raise ValueError('Dimensions changed')
             a=np.asarray(original); b=np.asarray(result.convert('RGB')); m=np.asarray(mask.convert('L'))>127; changed=np.any(a!=b,axis=2)
             row.update(mask_coverage=float(m.mean()),changed_fraction=float(changed.mean()),outside_mask_changed_fraction=float((changed & ~m).sum()/max(1,(~m).sum())),ocr_box_count=len(boxes),status='ok',error='')
+            if strategy == 'v894_local':
+                from quality_verification_v894 import extract_v894
+                row.update(v894_diagnostics=json.dumps(extract_v894.last_diagnostics))
             if strategy == 'v893_local':
                 from adaptive_reconstruction_v893 import extract_v893
                 row.update(v893_diagnostics=json.dumps(extract_v893.last_diagnostics))
