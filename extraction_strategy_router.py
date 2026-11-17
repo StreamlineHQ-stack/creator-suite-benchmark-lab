@@ -11,6 +11,7 @@ from targeted_repair_v6 import repair as repair_v6
 from extraction_engine import inpaint
 
 STRATEGIES = {
+    "v894_local": "V8.9.4 Intelligent Quality Verification (experimental)",
     "v893_local": "V8.9.3 Adaptive Reconstruction (experimental)",
     "v892a_local": "V8.9.2a Adaptive Semantic Protection (experimental)",
     "v892_local": "V8.9.2 Semantic Subject Protection (experimental)",
@@ -48,6 +49,9 @@ def extract(image: Image.Image, strategy: str = "baseline_v6", padding: int = 5,
         extract.last_diagnostics = diagnostics
         return cleaned, mask, boxes, coverage
     extract.last_diagnostics = None
+    if strategy == "v894_local":
+        from quality_verification_v894 import extract_v894
+        return extract_v894(image, padding, radius)
     if strategy == "v893_local":
         from adaptive_reconstruction_v893 import extract_v893
         return extract_v893(image, padding, radius)
